@@ -36,6 +36,8 @@ def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> tupl
     """
     instructions = None
     input_items = []
+    # Remap call IDs: Responses API requires IDs starting with 'fc_'
+    id_map = {}
 
     for msg in messages:
         role = msg.get("role", "")
@@ -100,11 +102,17 @@ def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> tupl
             tool_calls = msg.get("tool_calls") or []
             for tc in tool_calls:
                 func = tc.get("function", {})
-                tc_id = tc.get("id", f"call_{uuid.uuid4().hex[:24]}")
+                original_id = tc.get("id", f"call_{uuid.uuid4().hex[:24]}")
+                # Remap ID to fc_ prefix if needed
+                if original_id.startswith("fc_"):
+                    fc_id = original_id
+                else:
+                    fc_id = f"fc_{original_id.replace('call_', '')}"
+                id_map[original_id] = fc_id
                 input_items.append({
                     "type": "function_call",
-                    "id": tc_id,
-                    "call_id": tc_id,
+                    "id": fc_id,
+                    "call_id": fc_id,
                     "name": func.get("name", ""),
                     "arguments": func.get("arguments", "{}"),
                 })
@@ -112,9 +120,11 @@ def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> tupl
 
         if role == "tool":
             # Tool results become function_call_output
+            original_call_id = msg.get("tool_call_id", "")
+            remapped_call_id = id_map.get(original_call_id, original_call_id)
             input_items.append({
                 "type": "function_call_output",
-                "call_id": msg.get("tool_call_id", ""),
+                "call_id": remapped_call_id,
                 "output": msg.get("content", ""),
             })
             continue
@@ -154,8 +164,12 @@ def _normalize_responses_to_chat_completion(response_dict: Dict[str, Any]) -> Di
                     text_parts.append(content_block.get("text", ""))
 
         elif item_type == "function_call":
+            call_id = item.get("call_id", item.get("id", f"call_{uuid.uuid4().hex[:24]}"))
+            # Remap fc_ IDs back to call_ format for downstream compatibility
+            if call_id.startswith("fc_"):
+                call_id = f"call_{call_id[3:]}"
             tool_calls.append({
-                "id": item.get("call_id", item.get("id", f"call_{uuid.uuid4().hex[:24]}")),
+                "id": call_id,
                 "type": "function",
                 "function": {
                     "name": item.get("name", ""),
@@ -383,6 +397,8 @@ class OpenAIClient:
                     elif event_type == "response.function_call_arguments.delta":
                         item_id = event_dict.get("item_id", "")
                         call_id = event_dict.get("call_id", item_id)
+                        if call_id.startswith("fc_"):
+                            call_id = f"call_{call_id[3:]}"
                         output_index = event_dict.get("output_index", 0)
                         chunk = {
                             "choices": [{"index": 0, "delta": {
@@ -400,11 +416,14 @@ class OpenAIClient:
                         item = event_dict.get("item", {})
                         if item.get("type") == "function_call":
                             output_index = event_dict.get("output_index", 0)
+                            fc_id = item.get("call_id", item.get("id", ""))
+                            if fc_id.startswith("fc_"):
+                                fc_id = f"call_{fc_id[3:]}"
                             chunk = {
                                 "choices": [{"index": 0, "delta": {
                                     "tool_calls": [{
                                         "index": output_index,
-                                        "id": item.get("call_id", item.get("id", "")),
+                                        "id": fc_id,
                                         "type": "function",
                                         "function": {"name": item.get("name", ""), "arguments": ""}
                                     }]
