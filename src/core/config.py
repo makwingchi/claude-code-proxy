@@ -18,7 +18,7 @@ class Config:
         self.host = os.environ.get("HOST", "0.0.0.0")
         self.port = int(os.environ.get("PORT", "8082"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
-        self.max_tokens_limit = int(os.environ.get("MAX_TOKENS_LIMIT", "4096"))
+        self.max_tokens_limit = int(os.environ.get("MAX_TOKENS_LIMIT", "16384"))
         self.min_tokens_limit = int(os.environ.get("MIN_TOKENS_LIMIT", "100"))
         
         # Connection settings
