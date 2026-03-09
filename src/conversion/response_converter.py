@@ -347,7 +347,6 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             final_stop_reason = Constants.STOP_END_TURN
 
     except HTTPException as e:
-        # Handle cancellation
         if e.status_code == 499:
             logger.info(f"Request {request_id} was cancelled")
             error_event = {
@@ -359,8 +358,17 @@ async def convert_openai_streaming_to_claude_with_cancellation(
             }
             yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
             return
-        else:
-            raise
+
+        logger.error(f"Streaming HTTP error: {e.detail}")
+        error_event = {
+            "type": "error",
+            "error": {
+                "type": "api_error",
+                "message": str(e.detail),
+            },
+        }
+        yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+        return
     except Exception as e:
         # Handle any streaming errors gracefully
         logger.error(f"Streaming error: {e}")

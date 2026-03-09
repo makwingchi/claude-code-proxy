@@ -73,11 +73,12 @@ The application automatically loads environment variables from a `.env` file in 
 - `ANTHROPIC_API_KEY` - Expected Anthropic API key for client validation
   - If set, clients must provide this exact API key to access the proxy
   - If not set, any API key will be accepted
+- `ENABLE_TEST_CONNECTION` - Enable the `/test-connection` endpoint (default: disabled)
 
 **Model Configuration:**
 
 - `BIG_MODEL` - Model for Claude opus requests (default: `gpt-4o`)
-- `MIDDLE_MODEL` - Model for Claude opus requests (default: `gpt-4o`)
+- `MIDDLE_MODEL` - Model for Claude sonnet requests (default: `BIG_MODEL`)
 - `SMALL_MODEL` - Model for Claude haiku requests (default: `gpt-4o-mini`)
 
 **API Configuration:**
@@ -240,8 +241,11 @@ claude
 Test proxy functionality:
 
 ```bash
-# Run comprehensive tests
-python src/test_claude_to_openai.py
+# Run default test suite (unit/contract tests)
+uv run pytest
+
+# Run live integration checks (requires running local proxy + credentials)
+uv run pytest -m integration
 ```
 
 ## Development

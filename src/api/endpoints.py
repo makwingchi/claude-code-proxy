@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Header, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from datetime import datetime
 import uuid
@@ -28,30 +28,38 @@ openai_client = OpenAIClient(
     custom_headers=custom_headers,
 )
 
-async def validate_api_key(x_api_key: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
+async def validate_api_key(
+    x_api_key: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
+) -> None:
     """Validate the client's API key from either x-api-key header or Authorization header."""
     client_api_key = None
     
     # Extract API key from headers
-    if x_api_key:
+    if x_api_key is not None:
         client_api_key = x_api_key
-    elif authorization and authorization.startswith("Bearer "):
-        client_api_key = authorization.replace("Bearer ", "")
+    elif authorization is not None and authorization.startswith("Bearer "):
+        client_api_key = authorization.replace("Bearer ", "", 1)
     
     # Skip validation if ANTHROPIC_API_KEY is not set in the environment
-    if not config.anthropic_api_key:
+    if config.anthropic_api_key is None:
         return
         
     # Validate the client API key
     if not client_api_key or not config.validate_client_api_key(client_api_key):
-        logger.warning(f"Invalid API key provided by client")
+        logger.warning("Invalid API key provided by client")
         raise HTTPException(
             status_code=401,
             detail="Invalid API key. Please provide a valid Anthropic API key."
         )
 
+
 @router.post("/v1/messages")
-async def create_message(request: ClaudeMessagesRequest, http_request: Request, _: None = Depends(validate_api_key)):
+async def create_message(
+    request: ClaudeMessagesRequest,
+    http_request: Request,
+    _: None = Depends(validate_api_key),
+):
     try:
         logger.debug(
             f"Processing Claude request: model={request.model}, stream={request.stream}"
@@ -70,7 +78,7 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
         if request.stream:
             # Streaming response - wrap in error handling
             try:
-                openai_stream = openai_client.create_chat_completion_stream(
+                openai_stream = await openai_client.create_chat_completion_stream(
                     openai_request, request_id
                 )
                 return StreamingResponse(
@@ -93,9 +101,6 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             except HTTPException as e:
                 # Convert to proper error response for streaming
                 logger.error(f"Streaming error: {e.detail}")
-                import traceback
-
-                logger.error(traceback.format_exc())
                 error_message = openai_client.classify_openai_error(e.detail)
                 error_response = {
                     "type": "error",
@@ -114,16 +119,16 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-
         logger.error(f"Unexpected error processing request: {e}")
-        logger.error(traceback.format_exc())
+        logger.exception("Request processing failed")
         error_message = openai_client.classify_openai_error(str(e))
         raise HTTPException(status_code=500, detail=error_message)
 
 
 @router.post("/v1/messages/count_tokens")
-async def count_tokens(request: ClaudeTokenCountRequest, _: None = Depends(validate_api_key)):
+async def count_tokens(
+    request: ClaudeTokenCountRequest, _: None = Depends(validate_api_key)
+):
     try:
         # For token counting, we'll use a simple estimation
         # In a real implementation, you might want to use tiktoken or similar
@@ -173,8 +178,11 @@ async def health_check():
 
 
 @router.get("/test-connection")
-async def test_connection():
+async def test_connection(_: None = Depends(validate_api_key)):
     """Test API connectivity to OpenAI"""
+    if not config.enable_test_connection:
+        raise HTTPException(status_code=404, detail="Not found")
+
     try:
         # Simple test request to verify API connectivity
         test_response = await openai_client.create_chat_completion(
@@ -195,12 +203,13 @@ async def test_connection():
 
     except Exception as e:
         logger.error(f"API connectivity test failed: {e}")
+        logger.exception("Connectivity test failed")
         return JSONResponse(
             status_code=503,
             content={
                 "status": "failed",
                 "error_type": "API Error",
-                "message": str(e),
+                "message": "Upstream API connectivity test failed.",
                 "timestamp": datetime.now().isoformat(),
                 "suggestions": [
                     "Check your OPENAI_API_KEY is valid",

@@ -6,8 +6,6 @@ This script demonstrates how client disconnection cancels ongoing requests.
 
 import asyncio
 import httpx
-import json
-import time
 
 async def test_non_streaming_cancellation():
     """Test cancellation for non-streaming requests."""

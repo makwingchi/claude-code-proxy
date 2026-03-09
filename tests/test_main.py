@@ -1,11 +1,18 @@
-"""Test script for Claude to OpenAI proxy."""
+"""Live integration checks for a running proxy server.
+
+These checks call localhost and require a running proxy plus real API credentials.
+They are excluded from default pytest runs.
+"""
 
 import asyncio
 import json
 import httpx
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
+
+pytestmark = pytest.mark.integration
 
 
 async def test_basic_chat():

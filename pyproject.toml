@@ -37,16 +37,8 @@ dev = [
     "httpx>=0.25.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/holegots/claude-code-proxy"
-Repository = "https://github.com/holegots/claude-code-proxy.git"
-Issues = "https://github.com/holegots/claude-code-proxy/issues"
-
-[project.scripts]
-claude-code-proxy = "src.main:main"
-
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
@@ -54,6 +46,14 @@ dev-dependencies = [
     "mypy>=1.0.0",
     "pyinstaller>=6.15.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/holegots/claude-code-proxy"
+Repository = "https://github.com/holegots/claude-code-proxy.git"
+Issues = "https://github.com/holegots/claude-code-proxy/issues"
+
+[project.scripts]
+claude-code-proxy = "src.main:main"
 
 [tool.black]
 line-length = 100
